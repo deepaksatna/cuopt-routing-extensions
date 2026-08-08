@@ -55,7 +55,7 @@ We also, separately and with evidence, flag a **pre-existing** `l1_homberger` re
 
 ## Regression & test results
 
-![cuOpt routing regression and EV validation — 192 tests run, 191 passing, 1 documented, 1 pre-existing](docs/assets/regression-results.svg)
+![cuOpt routing regression and EV validation — 192 tests run, 191 passing, 1 documented, 1 pre-existing](docs/assets/regression-results.png)
 
 Full comprehensive regression on the H200 (cuOpt `26.10.00`). **Every failure was attributed by
 rebuilding stock `main` (`f3ebc673`) and re-running the same tests** — so "no regression" is proven,
@@ -86,7 +86,7 @@ We adopt **cuOpt's own routing benchmark methodology** (`regression/benchmark_sc
 report the **gap to the Best-Known Solution (BKS)** — `|((achieved − BKS) / BKS) × 100|` — on standard
 academic instances, where cuOpt's default regression threshold is **5%**.
 
-![EV distance-breaks add no measurable cost — solve time and gap-to-BKS, feature OFF vs ON](docs/assets/benchmark-parity.svg)
+![EV distance-breaks add no measurable cost — solve time and gap-to-BKS, feature OFF vs ON](docs/assets/benchmark-parity.png)
 
 On Solomon **r107** (BKS cost 1080.92, 11 vehicles), cuOpt reaches **~1% of best-known** within seconds,
 and the EV distance-break feature **ON vs OFF is within noise on both solve time and quality**
