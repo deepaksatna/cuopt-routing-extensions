@@ -11,11 +11,13 @@ Conventions:
 
 ---
 
-## 0. (OCI only) Grow the boot volume if the disk is < 120 GB free
+## 0. (cloud VMs) Grow the boot volume if the disk is < 120 GB free
 
 ```bash
-sudo /usr/libexec/oci-growfs -y        # grows the partition + extends LVM + xfs_growfs
-df -Ph /                               # verify free space
+# cloud-provider specific; generic form:
+sudo growpart /dev/DISK 1                       # grow the partition
+sudo lvextend -r -l +100%FREE /dev/mapper/root  # extend LVM + filesystem
+df -Ph /                                         # verify free space
 ```
 
 ## 1. Prereqs

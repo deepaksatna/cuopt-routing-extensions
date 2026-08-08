@@ -12,6 +12,30 @@ glue / tests — **the cuOpt solver core is not modified**.
 
 ---
 
+## For the cuOpt maintainers — TL;DR
+
+Three concrete, upstream-ready items for your review — all validated against a from-source build of
+`main` (`26.10.00`) and reproducible via `docs/COMMANDS-RUNBOOK.md`. **Every claim here is measured, not
+asserted, and no cuOpt solver-core source is modified.**
+
+1. **PR #1196 (EV distance-breaks) still integrates cleanly** onto current `main` — the merge conflicts
+   in a single test file; the 28 solver-core files merge clean; the PR's own suites pass
+   (**C++ `distance_breaks` 5/5**, **Python `test_distance_breaks` 29/30**).
+2. **Two small integration enhancements** the PR needs against main's newer store-then-build (deferred)
+   `DataModel` — a `_serialize` `_distance_break` handler + `_SETTERS` registration for
+   `add_distance_break` (`enhancements/integration-fixes.patch`, offered upstream; verified incl. serialize
+   round-trip).
+3. **One open semantics question** — multi-cycle distance-breaks: the window lower bound `d_min` is
+   **soft** (mirrors the time-window "arriving early is free" design); the range-critical upper bound
+   `d_max` **is** hard-enforced (→ infeasible), so it is **not** a safety bug. Should `d_min` be hard for
+   *distance* breaks so stacked cycles don't collapse into the earliest window?
+
+We also, separately and with evidence, flag a **pre-existing** `l1_homberger` regression-harness crash
+(fails identically on stock `main`) and highlight a **correctness fix already contained in the PR**
+(an off-by-one in location-range validation).
+
+---
+
 ## The four capabilities
 
 | # | Capability | Status | Approach |

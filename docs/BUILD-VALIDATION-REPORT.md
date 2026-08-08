@@ -32,10 +32,10 @@ solver test remains failing and is documented below as an open question for upst
 
 | Item | Value |
 |------|-------|
-| GPU box | OCI `VM.GPU.A10.2` — **2 × NVIDIA A10** (23 GB each), driver **595.71.05**, compute cap **8.6** |
+| GPU box | **2 × NVIDIA A10** (cloud VM) (23 GB each), driver **595.71.05**, compute cap **8.6** |
 | CPU / RAM | 60 vCPU / 471 GB (build throttled to `PARALLEL_LEVEL=32`) |
 | OS | Linux, kernel 5.15 |
-| Disk | Boot volume grown 30 GB → **283 GB** via `oci-growfs` (build tree + toolchain need ~120 GB) |
+| Disk | Boot volume grown 30 GB → **283 GB** via `growpart` + LVM extend (build tree + toolchain need ~120 GB) |
 | Build arch | **single-arch** `CUDAARCHS=86` (fast; vs `--allgpuarch`) |
 | Toolchain (conda env) | CUDA **13.3.73**, GCC **14.4.0**, Python **3.14.6**, CMake 4.4 |
 | cuOpt | `main` VERSION `26.10.00`, HEAD `f3ebc673` (build), merge commit `448fb194` (with PR #1196) |
