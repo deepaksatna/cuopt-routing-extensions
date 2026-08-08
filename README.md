@@ -5,7 +5,7 @@
 > **This branch implements Feature 4 the *real* way — native sparse (K-NN / CSR) cost support inside the
 > cuOpt C++ solver**, so routing scales past the dense **O(N²)** memory wall. It is a **validated
 > prototype**: gated behind a `has_sparse_cost` flag, so a dense problem is byte-for-byte identical to
-> upstream cuOpt. Measured on an H200, cuOpt `26.10.00`.
+> upstream cuOpt. Measured on an H200 and **validated on A10-class hardware (`sm_86`)**, cuOpt `26.10.00`.
 >
 > *(The sibling `feature/sparse-matrix` branch is Option A — an application-layer payload fix. This branch
 > is the deeper solver change.)*
@@ -45,6 +45,27 @@ O(N²) — the path to **100k+ stop** routing that dense cannot reach.
 
 ---
 
+## Validated on A10 (`sm_86`) — full report
+
+The feature was rebuilt for **A10-class GPUs (`sm_86`)** and re-benchmarked, reproducing the H200 findings
+on smaller, widely-deployed hardware. Build green, dense byte-identical, **every case feasible**, no lookup
+overhead, and the memory saving holds: **303× at 10k → 3,030× at 100k** stops.
+
+**Full write-up + plots:** [`native-sparse/A10-BENCHMARK-REPORT.md`](native-sparse/A10-BENCHMARK-REPORT.md)
+
+| Payload technique (10k stops) | Reduction | Solves 10k? | Note |
+|---|---|---|---|
+| FP32 precision | ~4% | No | precision barely changes JSON size |
+| Geographic clustering | ~73% | Yes | **fragments** the problem into 4 sub-solves |
+| Sparse matrix (stock cuOpt) | 0% | **No — FAILED** | must re-expand to dense 2,290 MB |
+| **Native sparse (this build)** | **~99.97% (3,000×)** | **Yes** | one **global** problem, no clustering |
+
+![Payload reduction: FP32 4%, clustering 73% (fragments), stock sparse FAILED, native sparse 99.97%](docs/assets/native-sparse-a10-payload-comparison.png)
+
+![Cost-matrix memory dense O(N^2) vs native-sparse CSR O(N*K): 303x at 10k to 3,030x at 100k; 40 GB dense won't fit an A10](docs/assets/native-sparse-a10-memory-scaling.png)
+
+---
+
 ## How it works (one injection point)
 
 The whole solver reads cost through a single chokepoint — `arc_value.hpp: get_distance → lookup_dist`.
@@ -76,6 +97,9 @@ not a rewrite:
    built → a true never-build-dense **100k** demonstration.
 2. **`SPARSE_ARC` infeasibility dimension** — productionise the fix (no co-opting max-cost).
 3. **Sparse the time matrix** too; **connectivity-preserving CSR** to lower K.
+
+Detailed, file-by-file implementation plan for step 1 (the payload win):
+[`native-sparse/B5-PLAN-direct-csr-ingestion.md`](native-sparse/B5-PLAN-direct-csr-ingestion.md).
 
 Full findings: [`native-sparse/OPTION-D-RESULTS.md`](native-sparse/OPTION-D-RESULTS.md) ·
 plan/architecture map: [`native-sparse/OPTION-D-native-sparse-plan.md`](native-sparse/OPTION-D-native-sparse-plan.md) ·
