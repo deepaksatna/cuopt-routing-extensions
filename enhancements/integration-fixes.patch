@@ -1,0 +1,104 @@
+diff --git a/cpp/tests/routing/level1/l1_routing_test.cu b/cpp/tests/routing/level1/l1_routing_test.cu
+index 2d918e7b..186c491a 100644
+--- a/cpp/tests/routing/level1/l1_routing_test.cu
++++ b/cpp/tests/routing/level1/l1_routing_test.cu
+@@ -24,6 +24,11 @@ TEST_P(regression_routing_test_50_t, CVRPTW_50) { test_cvrptw(); }
+ TEST_P(regression_routing_test_100_t, CVRPTW_100) { test_cvrptw(); }
+ TEST_P(float_regression_test_t, CVRPTW) { test_cvrptw(); }
+ TEST_P(regression_routing_test_pickup_t, PICKUP) { test_cvrptw(); }
++// Solomon-25 CVRPTW regression with one distance break per vehicle.
++TEST_P(regression_routing_test_distance_breaks_t, CVRPTW_DISTANCE_BREAKS)
++{
++  test_cvrptw_distance_breaks(/*min_range=*/5.f, /*max_range=*/120.f, /*duration=*/0);
++}
+ 
+ INSTANTIATE_TEST_SUITE_P(
+   l1_tsp,
+@@ -53,6 +58,10 @@ INSTANTIATE_TEST_SUITE_P(
+   l1_pickup,
+   regression_routing_test_pickup_t,
+   ::testing::ValuesIn(parse_tests(cuopt::test::read_tests("datasets/ref/l1_pickup.txt"))));
++INSTANTIATE_TEST_SUITE_P(
++  l1_distance_breaks,
++  regression_routing_test_distance_breaks_t,
++  ::testing::ValuesIn(parse_tests(cuopt::test::read_tests("datasets/ref/l1_25.txt"))));
+ 
+ }  // namespace test
+ }  // namespace routing
+diff --git a/python/cuopt/cuopt/routing/_deferred.py b/python/cuopt/cuopt/routing/_deferred.py
+index ff8ed1de..5a4e018c 100644
+--- a/python/cuopt/cuopt/routing/_deferred.py
++++ b/python/cuopt/cuopt/routing/_deferred.py
+@@ -51,6 +51,7 @@ _SETTERS = (
+     "add_order_vehicle_match",
+     "add_transit_time_matrix",
+     "add_vehicle_break",
++    "add_distance_break",
+     "add_vehicle_order_match",
+     "set_break_locations",
+     "set_drop_return_trips",
+diff --git a/python/cuopt/cuopt/routing/_serialize.py b/python/cuopt/cuopt/routing/_serialize.py
+index 47298f54..a3c8a2c1 100644
+--- a/python/cuopt/cuopt/routing/_serialize.py
++++ b/python/cuopt/cuopt/routing/_serialize.py
+@@ -146,6 +146,31 @@ def _vehicle_break(p, args):
+     entry["breaks"].append(brk)
+ 
+ 
++def _distance_break(p, args):
++    # EV distance-break: mandatory recharge within a cumulative-distance window
++    # [distance_min, distance_max], optionally restricted to charging locations.
++    # Mirrors _vehicle_break but keyed by distance instead of time.
++    vehicle_id = int(args[0])
++    locations = args[4] if len(args) > 4 else None
++    brk = {
++        "distance_min": _to_host(args[1]),
++        "distance_max": _to_host(args[2]),
++        "duration": _to_host(args[3]),
++        "locations": (
++            _to_host(locations)
++            if locations is not None
++            else np.empty(0, np.int32)
++        ),
++    }
++    entry = next(
++        (e for e in p["distance_breaks"] if e["vehicle_id"] == vehicle_id), None
++    )
++    if entry is None:
++        entry = {"vehicle_id": vehicle_id, "breaks": []}
++        p["distance_breaks"].append(entry)
++    entry["breaks"].append(brk)
++
++
+ _HANDLERS = {
+     "add_cost_matrix": _matrix("cost_matrices"),
+     "add_transit_time_matrix": _matrix("transit_time_matrices"),
+@@ -164,6 +189,7 @@ _HANDLERS = {
+     "add_order_precedence": _precedence,
+     "add_break_dimension": _uniform_break,
+     "add_vehicle_break": _vehicle_break,
++    "add_distance_break": _distance_break,
+     "set_objective_function": _objective,
+     "add_initial_solutions": _initial_solutions,
+     "set_min_vehicles": _scalar("min_vehicles"),
+@@ -181,6 +207,7 @@ _LIST_FIELDS = (
+     "order_precedence",
+     "uniform_breaks",
+     "vehicle_breaks",
++    "distance_breaks",
+ )
+ 
+ 
+diff --git a/python/cuopt/cuopt/tests/routing/test_warnings_exceptions.py b/python/cuopt/cuopt/tests/routing/test_warnings_exceptions.py
+index 067d9d8f..fec89780 100644
+--- a/python/cuopt/cuopt/tests/routing/test_warnings_exceptions.py
++++ b/python/cuopt/cuopt/tests/routing/test_warnings_exceptions.py
+@@ -139,7 +139,7 @@ def test_range():
+         dm.set_order_locations(order_locations)
+     assert (
+         str(exc_info.value)
+-        == "All values in order locations must be less than or equal to 3"
++        == "All values in order locations must be less than or equal to 2"
+     )
+ 
+ 

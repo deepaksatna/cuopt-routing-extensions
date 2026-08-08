@@ -1,0 +1,99 @@
+From 59432cf94e14a4fb6953f08bd101d84c8b98cd07 Mon Sep 17 00:00:00 2001
+From: CoE cuOPT-Dev <coe@local>
+Date: Sat, 8 Aug 2026 11:42:25 +0000
+Subject: [PATCH 5/5] EV distance-breaks: complete deferred/serialize
+ integration + align stale test
+
+Completes PR #1196 integration with main current store-then-build (deferred)
+DataModel, and aligns a stale validation test with the PR own correctness fix.
+
+- _serialize.py: add _distance_break export handler (mirrors _vehicle_break,
+  keyed by cumulative distance), register "add_distance_break" in _HANDLERS,
+  add "distance_breaks" to _LIST_FIELDS. Makes the EV setter serializable through
+  the deferred model (was flagged by test_every_setter_is_exportable, which is a
+  guard that fails loudly on any setter lacking an export mapping).
+- test_warnings_exceptions.py::test_range: PR #1196 fixes an off-by-one in the
+  location-range validation (get_num_locations() -> get_num_locations()-1; a
+  3-location model must reject index 3). Updated the stale expectation 3 -> 2 to
+  match the corrected, more-correct behavior.
+
+Validation (H200, cuOpt 26.10.00):
+- test_serialize.py: 4/4 pass (incl round-trip). test_range: pass.
+- Full python routing suite: 86 passed, 1 failed (test_solve_full_feature_api,
+  multi-cycle d_min soft-by-design; documented upstream semantics question).
+
+No cuOpt solver-core source modified (Python glue + test only).
+Local checkpoint; NOT pushed to NVIDIA/cuopt.
+---
+ python/cuopt/cuopt/routing/_serialize.py      | 27 +++++++++++++++++++
+ .../tests/routing/test_warnings_exceptions.py |  2 +-
+ 2 files changed, 28 insertions(+), 1 deletion(-)
+
+diff --git a/python/cuopt/cuopt/routing/_serialize.py b/python/cuopt/cuopt/routing/_serialize.py
+index 47298f54..a3c8a2c1 100644
+--- a/python/cuopt/cuopt/routing/_serialize.py
++++ b/python/cuopt/cuopt/routing/_serialize.py
+@@ -146,6 +146,31 @@ def _vehicle_break(p, args):
+     entry["breaks"].append(brk)
+ 
+ 
++def _distance_break(p, args):
++    # EV distance-break: mandatory recharge within a cumulative-distance window
++    # [distance_min, distance_max], optionally restricted to charging locations.
++    # Mirrors _vehicle_break but keyed by distance instead of time.
++    vehicle_id = int(args[0])
++    locations = args[4] if len(args) > 4 else None
++    brk = {
++        "distance_min": _to_host(args[1]),
++        "distance_max": _to_host(args[2]),
++        "duration": _to_host(args[3]),
++        "locations": (
++            _to_host(locations)
++            if locations is not None
++            else np.empty(0, np.int32)
++        ),
++    }
++    entry = next(
++        (e for e in p["distance_breaks"] if e["vehicle_id"] == vehicle_id), None
++    )
++    if entry is None:
++        entry = {"vehicle_id": vehicle_id, "breaks": []}
++        p["distance_breaks"].append(entry)
++    entry["breaks"].append(brk)
++
++
+ _HANDLERS = {
+     "add_cost_matrix": _matrix("cost_matrices"),
+     "add_transit_time_matrix": _matrix("transit_time_matrices"),
+@@ -164,6 +189,7 @@ _HANDLERS = {
+     "add_order_precedence": _precedence,
+     "add_break_dimension": _uniform_break,
+     "add_vehicle_break": _vehicle_break,
++    "add_distance_break": _distance_break,
+     "set_objective_function": _objective,
+     "add_initial_solutions": _initial_solutions,
+     "set_min_vehicles": _scalar("min_vehicles"),
+@@ -181,6 +207,7 @@ _LIST_FIELDS = (
+     "order_precedence",
+     "uniform_breaks",
+     "vehicle_breaks",
++    "distance_breaks",
+ )
+ 
+ 
+diff --git a/python/cuopt/cuopt/tests/routing/test_warnings_exceptions.py b/python/cuopt/cuopt/tests/routing/test_warnings_exceptions.py
+index 067d9d8f..fec89780 100644
+--- a/python/cuopt/cuopt/tests/routing/test_warnings_exceptions.py
++++ b/python/cuopt/cuopt/tests/routing/test_warnings_exceptions.py
+@@ -139,7 +139,7 @@ def test_range():
+         dm.set_order_locations(order_locations)
+     assert (
+         str(exc_info.value)
+-        == "All values in order locations must be less than or equal to 3"
++        == "All values in order locations must be less than or equal to 2"
+     )
+ 
+ 
+-- 
+2.34.1
+

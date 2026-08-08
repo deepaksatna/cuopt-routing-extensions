@@ -1,0 +1,21 @@
+# Python
+__pycache__/
+*.pyc
+.venv/
+.cuopt_env/
+
+# build artefacts
+build/
+dist/
+*.so
+*.o
+
+# datasets (fetched at test time via cuOpt's datasets/get_test_data.sh)
+datasets/
+solomon/
+pdptw/
+acvrp/
+cvrptw/
+
+# local env
+.DS_Store

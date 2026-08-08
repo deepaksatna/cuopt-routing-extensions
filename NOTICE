@@ -1,0 +1,18 @@
+cuopt-routing-extensions
+Copyright 2026 <your name / org>
+
+Licensed under the Apache License, Version 2.0 (the "License"); you may not use
+these files except in compliance with the License. You may obtain a copy of the
+License at http://www.apache.org/licenses/LICENSE-2.0
+
+This work is an independent companion to NVIDIA cuOpt
+(https://github.com/NVIDIA/cuopt, Apache-2.0) and contains no cuOpt source code.
+
+Attribution:
+- The EV charging / "distance breaks" feature under validation is NVIDIA/cuOpt
+  Pull Request #1196, authored by its original contributor. This repository
+  validates that PR and provides integration enhancements offered upstream for
+  review; it does not claim authorship of the PR's feature code.
+- Enhancements in enhancements/integration-fixes.patch (deferred/serialize
+  wiring for add_distance_break, and a stale-test alignment) are contributed
+  under Apache-2.0 for consideration by the cuOpt maintainers.
