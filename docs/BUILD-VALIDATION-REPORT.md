@@ -34,7 +34,7 @@ solver test remains failing and is documented below as an open question for upst
 |------|-------|
 | GPU box | OCI `VM.GPU.A10.2` — **2 × NVIDIA A10** (23 GB each), driver **595.71.05**, compute cap **8.6** |
 | CPU / RAM | 60 vCPU / 471 GB (build throttled to `PARALLEL_LEVEL=32`) |
-| OS | Oracle Linux 9.8, kernel 5.15 UEK |
+| OS | Linux, kernel 5.15 |
 | Disk | Boot volume grown 30 GB → **283 GB** via `oci-growfs` (build tree + toolchain need ~120 GB) |
 | Build arch | **single-arch** `CUDAARCHS=86` (fast; vs `--allgpuarch`) |
 | Toolchain (conda env) | CUDA **13.3.73**, GCC **14.4.0**, Python **3.14.6**, CMake 4.4 |

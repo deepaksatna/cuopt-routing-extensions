@@ -5,9 +5,9 @@ existing **an internal cuOpt POC benchmarking methodology** as the harness that 
 net improvement" for every feature in this study.
 
 Sources of record:
-- Benchmark data: `benchmark-ai-packs/CuOPT-small/payload_optimisation/REPORT_A100_Payload_Optimization.md`
+- Benchmark data: an internal cuOpt payload-optimization POC report (A100)
   and `EMAIL_Product_Team_CuOPT_Findings.md`
-- Benchmark methodology: `benchmark-ai-packs/performance/docs/AI_Accelerator_CuOPT_POC_Product_Benchmarking.md`
+- Benchmark methodology: an internal cuOpt POC benchmarking methodology doc
 - Solver source: `cuOPT-Dev/cuopt-src` @ main (VERSION 26.10.00)
 
 ---

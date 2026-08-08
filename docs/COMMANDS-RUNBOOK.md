@@ -2,7 +2,7 @@
 
 Copy-pasteable reproduction of the work described in `BUILD-VALIDATION-REPORT.md`.
 Target: a Linux GPU box, compute capability ≥ 7.0, CUDA 13 driver (≥ 560; we used driver 595),
-≥ 120 GB free disk. All commands are as-run on the 2×A10 OCI box (`user@…`, Oracle Linux 9.8).
+≥ 120 GB free disk. All commands are as-run on the 2×A10 GPU box (`user@…`, Linux).
 
 Conventions:
 - `REPO=~/cuopt-dev/cuopt`  ·  conda env at `$REPO/.cuopt_env`
@@ -21,7 +21,7 @@ df -Ph /                               # verify free space
 ## 1. Prereqs
 
 ```bash
-sudo dnf install -y git tmux curl      # Oracle Linux 9; use apt on Ubuntu
+sudo dnf install -y git tmux curl      # RPM-based distro; use apt on Debian/Ubuntu
 ```
 
 ## 2. Phase 0 — build from source (via the bootstrap script)

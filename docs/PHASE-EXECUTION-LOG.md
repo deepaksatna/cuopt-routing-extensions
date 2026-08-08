@@ -14,7 +14,7 @@ Running record of the phase-by-phase validation, executed autonomously. For each
 | Toolchain | CUDA 13.3, GCC 14.x, Python 3.14, single-arch `CUDAARCHS=90`, 32 build jobs |
 | cuOpt | `main` VERSION 26.10.00, base HEAD `f3ebc673` |
 
-> Note: this H200 is a **fresh rebuild** after the earlier 2×A10 OCI box was terminated. Because the
+> Note: this H200 is a **fresh rebuild** after the earlier 2×A10 GPU box was terminated. Because the
 > deliverable `scripts/phase0_bootstrap.sh` now carries all four Phase-0 fixes, the build reproduced
 > green in a single unattended shot — itself a validation of the fixed script.
 
