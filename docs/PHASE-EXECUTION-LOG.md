@@ -52,7 +52,7 @@ Running record of the phase-by-phase validation, executed autonomously. For each
 - **Results (H200):** merge conflicted in **1 file only** (as expected); both integration fixes
   applied. Rebuild `BUILD_EXIT=0` (95 targets). **C++ `distance_breaks` gtest: 5/5 PASS.**
   **Python `test_distance_breaks.py`: 29 passed / 1 failed** — the 1 = `test_solve_full_feature_api`
-  (multi-cycle `d_min` soft-by-design; see report §4.6; `d_max`/range hard-enforced → not a safety
+  (multi-cycle `d_min` soft-by-design; see report section 4.6; `d_max`/range hard-enforced → not a safety
   bug). Committed locally: branch `feature/ev-distance-breaks-pr1196` `f2a75bdb` (30 files; **not
   pushed** to NVIDIA). Identical outcome to the earlier 2×A10 run → reproducible.
 

@@ -46,7 +46,7 @@ v4 front-end / server layer. Optional warm-start between windows.
 3. Run bundled tests: `cpp/tests/routing/unit_tests/distance_breaks.cu` (426 lines) and
    `python/cuopt/cuopt/tests/routing/test_distance_breaks.py` (487 lines).
 4. Run `docs/.../examples/distance_break_example.py` end-to-end.
-5. **Feature-OFF regression benchmark** (see `03` §prove-it) — must be within noise.
+5. **Feature-OFF regression benchmark** (see `03` section prove-it) — must be within noise.
 6. Expose `add_distance_break()` via the self-hosted server; wire the v4 front-end payload (EV stations
    already exist in `evChargingData.ts`).
 
@@ -74,7 +74,7 @@ v4 front-end / server layer. Optional warm-start between windows.
 
 Removes the **measured** 2 GB payload wall (POC Phase 4) that caps monolithic solves at ~7,500 stops. Client
 sends coordinates + K instead of a dense N×N matrix; the server builds the matrix on the GPU. No solver-core
-change, so no hot-path risk. Validate with the sparse scenario in the benchmark harness (`05` §B.4): payload
+change, so no hot-path risk. Validate with the sparse scenario in the benchmark harness (`05` section B.4): payload
 must drop from GB to KB while solve time tracks the dense clustering baseline.
 
 - **Effort:** 1–2 weeks · **Risk:** low · **Perf when unused:** zero (dense path untouched).
@@ -103,7 +103,7 @@ Phase 4    Time-of-day Tier B                 [############...] (4–8 wk, optio
 Phase 5    True sparse core (Opt D)             [################...] (6–12 wk R&D, optional) depends on P0
 ```
 
-Every phase is gated by the **adopted POC benchmark harness** (`05` §B): feature-OFF must reproduce the
+Every phase is gated by the **adopted POC benchmark harness** (`05` section B): feature-OFF must reproduce the
 canonical A10 baselines (FSD 65 s / MIX 70 s / HDP 102 s P95) within noise before the change is merge-ready.
 
 ---

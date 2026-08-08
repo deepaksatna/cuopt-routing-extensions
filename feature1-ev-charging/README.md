@@ -28,4 +28,4 @@ The diffs are in `../enhancements/integration-fixes.patch`. Full narrative in
 break lands outside its window, because the distance-window lower bound `d_min` is **soft** (mirrors the
 time-window "arriving early is free" design). The range-critical **upper bound `d_max` is
 hard-enforced** (→ infeasible), so this is **not** a safety bug — an EV cannot be routed past its range.
-Should `d_min` be hard for *distance* breaks? See `../docs/BUILD-VALIDATION-REPORT.md` §4.6.
+Should `d_min` be hard for *distance* breaks? See `../docs/BUILD-VALIDATION-REPORT.md` section 4.6.

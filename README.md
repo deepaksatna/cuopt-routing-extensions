@@ -53,6 +53,46 @@ We also, separately and with evidence, flag a **pre-existing** `l1_homberger` re
 - **F2 skill-match:** `prizes=1` → clean **partial** solution honouring every constraint (no violation).
 - **Regression:** C++ 105 pass; **Python 86/1** after the enhancements. Every failure attributed vs stock `main`.
 
+## Regression & test results
+
+![cuOpt routing regression and EV validation — 192 tests run, 191 passing, 1 documented, 1 pre-existing](docs/assets/regression-results.svg)
+
+Full comprehensive regression on the H200 (cuOpt `26.10.00`). **Every failure was attributed by
+rebuilding stock `main` (`f3ebc673`) and re-running the same tests** — so "no regression" is proven,
+not asserted.
+
+| Suite | Result | Notes |
+|-------|--------|-------|
+| C++ `ROUTING_UNIT_TEST` | **53 / 53 pass** | includes EV `distance_breaks` 5/5 |
+| C++ `ROUTING_INTERNAL_TEST` | **52 / 52 pass** | |
+| C++ `ROUTING_L1TEST` | 1 pre-existing fail | `l1_homberger` `SetUp()` crash — fails on stock `main` too |
+| Python routing suite | **86 pass / 1 fail** | after enhancements (was 84 / 3) |
+
+### Failure attribution (rebuild-and-compare vs stock `main`)
+
+| Failure | Stock `main` | EV build | Verdict |
+|---------|--------------|----------|---------|
+| `l1_homberger` | FAILS | FAILS | **Pre-existing** infra crash — not a regression |
+| `test_serialize` | PASS | was FAIL | **Our** integration gap → fixed (serialize handler) |
+| `test_range` | PASS (`≤3`) | was FAIL (`≤2`) | **PR's own off-by-one correctness fix** — stale test aligned |
+| `test_solve_full_feature_api` | n/a | FAIL | **Documented** multi-cycle `d_min` (soft-by-design) |
+
+**No functional or performance regression is introduced by adopting the EV feature.** Full narrative:
+`docs/REGRESSION-ANALYSIS-AND-ENHANCEMENTS.md`.
+
+## Performance benchmark (cuOpt's own methodology)
+
+We adopt **cuOpt's own routing benchmark methodology** (`regression/benchmark_scripts/benchmark.py`):
+report the **gap to the Best-Known Solution (BKS)** — `|((achieved − BKS) / BKS) × 100|` — on standard
+academic instances, where cuOpt's default regression threshold is **5%**.
+
+![EV distance-breaks add no measurable cost — solve time and gap-to-BKS, feature OFF vs ON](docs/assets/benchmark-parity.svg)
+
+On Solomon **r107** (BKS cost 1080.92, 11 vehicles), cuOpt reaches **~1% of best-known** within seconds,
+and the EV distance-break feature **ON vs OFF is within noise on both solve time and quality**
+(10.08 s / 0.58% vs 10.12 s / 0.66%) — i.e. **no measurable performance cost** when the feature is used.
+Full tables, scaling sweep, and honest caveats: `benchmark/README.md`.
+
 ## What's genuinely new here (our contribution)
 
 Since PR #1196 branched, cuOpt `main` refactored `DataModel` to a **store-then-build (deferred)** model.
@@ -77,6 +117,7 @@ feature1-ev-charging/ notes + how the enhancements complete PR #1196
 feature2-skill-match/ prize-pattern repro scripts + results
 feature3-time-of-day/ Tier-A prototype + measured results
 feature4-sparse/      plan for the separate sparse-matrix workstream
+benchmark/            gap-to-BKS benchmark (adapts cuOpt's own methodology) + results
 bundle/               git bundle of the validated branch (importable)
 ```
 
@@ -95,7 +136,7 @@ git apply enhancements/integration-fixes.patch   # on top of a PR-#1196 merge
 Multi-cycle distance-breaks: the lower bound `d_min` is **soft** (mirrors time-window "waiting"); the
 range-critical upper bound `d_max` **is** hard-enforced (→ infeasible), so it is **not** a safety bug.
 Should `d_min` be hard for *distance* breaks so stacked cycles don't collapse into the earliest window?
-Detail in `docs/BUILD-VALIDATION-REPORT.md` §4.6.
+Detail in `docs/BUILD-VALIDATION-REPORT.md` section 4.6.
 
 ## Relationship to NVIDIA/cuOpt
 

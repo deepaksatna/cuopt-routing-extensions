@@ -24,7 +24,7 @@ test_every_setter_is_exportable`, `test_warnings_exceptions::test_range`.
 | `l1_homberger` | **FAILS** (identical `std::vector larger than max_size()` crash in `SetUp()`) | FAILS | **PRE-EXISTING** — a dataset-parse crash in the regression harness *before any solve*. Independent of EV (gated). **Not a regression.** |
 | `test_serialize::test_every_setter_is_exportable` | PASSES | FAILS | **EV-integration gap** — our `_SETTERS` registration of `add_distance_break` was incomplete (needs an export handler). **Fixed (Enhancement 1).** |
 | `test_warnings_exceptions::test_range` | PASSES (asserts `≤ 3`) | FAILS (runtime says `≤ 2`) | **PR correctness fix** — PR #1196 fixes an off-by-one in the location-range validation; the stale test still encoded the buggy bound. **Test updated (Enhancement 3).** Not a regression — the EV build is *more correct*. |
-| `test_solve_full_feature_api` | n/a (test is PR's) | FAILS | **Known, documented** — multi-cycle `d_min` soft-by-design (time-window mirror); `d_max`/range hard-enforced → not a safety bug. Upstream semantics question (report §4.6). |
+| `test_solve_full_feature_api` | n/a (test is PR's) | FAILS | **Known, documented** — multi-cycle `d_min` soft-by-design (time-window mirror); `d_max`/range hard-enforced → not a safety bug. Upstream semantics question (report section 4.6). |
 
 **Bottom line:** zero of the four are a functional or performance regression introduced by adopting the
 EV feature. One is pre-existing infra (l1_homberger), one is a correctness *improvement* by the PR

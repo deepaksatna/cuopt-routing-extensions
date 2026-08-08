@@ -26,7 +26,7 @@ Instead:
 
 **How it preserves performance:** the entire per-node hot path is gated behind `dim_info.has_distance_window`
 (`distance_route.cuh`, quoted in `03`). Problems without EV constraints allocate nothing and branch out
-immediately. See `03` §Feature 1.
+immediately. See `03` section Feature 1.
 
 | Metric | Assessment |
 |--------|-----------|

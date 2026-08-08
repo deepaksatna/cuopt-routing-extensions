@@ -17,7 +17,7 @@ This is the **4th challenge**, kept deliberately separate from the three already
   `~36·N²` bytes → **2 GB payload wall at ~7,500 stops**; 10k stops ≈ 3.5 GB (fails).
 - GPU memory (320 GB) was never the bottleneck — the **payload** is.
 
-## What we will test / build here (ranked, per `analysis/05` §A.3)
+## What we will test / build here (ranked, per `analysis/05` section A.3)
 
 | Option | Idea | Solves payload wall? | Solves GPU O(N²)? | Effort |
 |--------|------|:---:|:---:|:---:|
@@ -34,7 +34,7 @@ This is the **4th challenge**, kept deliberately separate from the three already
 2. **Waypoint / CSR sparse ingestion** (`waypoint_csr_test.py`): exercise cuOpt's existing
    `waypoint_matrix` CSR path (`cpp/include/cuopt/routing/distance_engine/waypoint_matrix.hpp`) —
    K-NN in, cost matrix out — and confirm it densifies before the solver (the nuance in `analysis/05`
-   §A.2).
+   section A.2).
 3. **Option A prototype**: server-side matrix generation from coordinates + K (payload → KB), solve
    with the generated matrix; compare solve time vs the dense baseline at the same N.
 4. **(Stretch) Option D notes**: gate `has_sparse_cost`, coalesced K-NN layout, benchmark the inner

@@ -114,7 +114,7 @@ CUDAARCHS=86 PARALLEL_LEVEL=32 ./build.sh cuopt --skip-grpc-build --install -v
 export RAPIDS_DATASET_ROOT_DIR="$REPO/datasets"
 python -m pytest -q python/cuopt/cuopt/tests/routing/test_distance_breaks.py --disable-warnings
 # expected: 29 passed, 1 failed
-# the 1 failure is test_solve_full_feature_api (multi-cycle n_cycles=2) — see report §4.5
+# the 1 failure is test_solve_full_feature_api (multi-cycle n_cycles=2) — see report section 4.5
 ```
 
 ### 3.6 Reproduce the one open failure in isolation (for upstream)
