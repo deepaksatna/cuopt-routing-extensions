@@ -1,145 +1,87 @@
-# cuopt-routing-extensions
+# cuopt-routing-extensions — `sparse-matrix-native` branch
 
-**Build, validation, and integration enhancements for [NVIDIA cuOpt](https://github.com/NVIDIA/cuopt) routing.**
+## Native sparse cost matrices in the NVIDIA cuOpt solver core
 
-Reproducible from-source build + evidence-backed validation of four enterprise routing capabilities on
-GPU, with per-failure regression attribution against stock `main`. Every enhancement here is Python
-glue / tests — **the cuOpt solver core is not modified**.
-
-> **Version `v0.1.0-beta`** · Targets cuOpt **`26.10.00`** (`main`) · License **Apache-2.0**
+> **This branch implements Feature 4 the *real* way — native sparse (K-NN / CSR) cost support inside the
+> cuOpt C++ solver**, so routing scales past the dense **O(N²)** memory wall. It is a **validated
+> prototype**: gated behind a `has_sparse_cost` flag, so a dense problem is byte-for-byte identical to
+> upstream cuOpt. Measured on an H200, cuOpt `26.10.00`.
 >
-> *Seeking validation from the cuOpt maintainers.* See `docs/COMMANDS-RUNBOOK.md` to reproduce every result.
+> *(The sibling `feature/sparse-matrix` branch is Option A — an application-layer payload fix. This branch
+> is the deeper solver change.)*
 
 ---
 
-## For the cuOpt maintainers — TL;DR
+## Why this matters
 
-Three concrete, upstream-ready items for your review — all validated against a from-source build of
-`main` (`26.10.00`) and reproducible via `docs/COMMANDS-RUNBOOK.md`. **Every claim here is measured, not
-asserted, and no cuOpt solver-core source is modified.**
+cuOpt's solver reads cost from a **dense N×N matrix**. At enterprise scale that memory grows
+quadratically and simply won't fit:
 
-1. **PR #1196 (EV distance-breaks) still integrates cleanly** onto current `main` — the merge conflicts
-   in a single test file; the 28 solver-core files merge clean; the PR's own suites pass
-   (**C++ `distance_breaks` 5/5**, **Python `test_distance_breaks` 29/30**).
-2. **Two small integration enhancements** the PR needs against main's newer store-then-build (deferred)
-   `DataModel` — a `_serialize` `_distance_break` handler + `_SETTERS` registration for
-   `add_distance_break` (`enhancements/integration-fixes.patch`, offered upstream; verified incl. serialize
-   round-trip).
-3. **One open semantics question** — multi-cycle distance-breaks: the window lower bound `d_min` is
-   **soft** (mirrors the time-window "arriving early is free" design); the range-critical upper bound
-   `d_max` **is** hard-enforced (→ infeasible), so it is **not** a safety bug. Should `d_min` be hard for
-   *distance* breaks so stacked cycles don't collapse into the earliest window?
+- **10,000 stops → 0.4 GB · 50,000 → 10 GB · 100,000 → 40 GB** (won't fit on most GPUs).
 
-We also, separately and with evidence, flag a **pre-existing** `l1_homberger` regression-harness crash
-(fails identically on stock `main`) and highlight a **correctness fix already contained in the PR**
-(an off-by-one in location-range validation).
+Native sparse stores only each stop's **K nearest neighbours** (K-NN / CSR): **O(N·K)** memory instead of
+O(N²) — the path to **100k+ stop** routing that dense cannot reach.
+
+![GPU cost-matrix memory: dense O(N^2) crosses typical GPU memory near 50-100k stops; top-K CSR stays in MB](docs/assets/native-sparse-memory.png)
 
 ---
 
-## The four capabilities
+## What's proven (measured, not modeled)
 
-| # | Capability | Status | Approach |
-|---|------------|--------|----------|
-| 1 | **EV charging stops** (distance-windowed mandatory recharge) | ✅ Validated | Adopt **[PR #1196](https://github.com/NVIDIA/cuopt/pull/1196)** + 3 integration enhancements |
-| 2 | **Skill-match honoured in partial solutions** | ✅ Validated | **Prize pattern** (per NVIDIA guidance) — no source change |
-| 3 | **Time-of-day / rush-hour travel times** | ✅ Validated | Application-layer **Tier A** — no solver change |
-| 4 | **Native sparse (K-NN) cost matrices** | ⏳ Separate workstream | See `feature4-sparse/` |
+| Result | Evidence |
+|--------|----------|
+| **Correct** | Full-CSR solve matches dense; dense regression green (57 py + 40 C++) with the flag off |
+| **No lookup overhead** | Dense vs full-CSR reach the same objective at the same time budget |
+| **Fully feasible & near-optimal** | With the missing-arc→infeasibility fix: **+1.8% to +6.2%** vs dense, up to n=1000 |
+| **Memory saving grows with N** | **8× → 12× → 20×** measured (K/N shrinks 0.12→0.05); O(N·K) model → 3,030× at 100k |
 
-## Headline results (measured on an H200; also reproduced on 2×A10)
+![Native sparse fully feasible; memory saving grows with N: 8x at 250 (+1.9%), 12x at 500 (+3.2%), 20x at 1000 (+1.8%)](docs/assets/native-sparse-feasibility.png)
 
-- **Build:** cuOpt `26.10.00` from source → **57 routing tests pass**.
-- **F1 EV (PR #1196):** merges clean onto current `main` (1-file test conflict); **C++ `distance_breaks` 5/5**, **Python `test_distance_breaks` 29/30** (1 documented multi-cycle semantics question).
-- **F3 time-of-day:** **2.21× rush-hour penalty** across 5 departure windows; zero solver change.
-- **F2 skill-match:** `prizes=1` → clean **partial** solution honouring every constraint (no violation).
-- **Regression:** C++ 105 pass; **Python 86/1** after the enhancements. Every failure attributed vs stock `main`.
+**The engineering that makes it feasible** (all measured):
+1. A **navigable sentinel** for absent arcs (`BIG_COST=1e6`, not `1e30` — the latter leaves the search stuck).
+2. **Depot-aware CSR** (every node keeps the depot; depot connects to all).
+3. **Missing-arc → infeasibility** — route "used a missing arc" into the solver's infeasibility system
+   (demonstrated via existing vehicle max-cost machinery) so the solver drives it to **zero**.
 
-## Regression & test results
+---
 
-![cuOpt routing regression and EV validation — 192 tests run, 191 passing, 1 documented, 1 pre-existing](docs/assets/regression-results.png)
+## How it works (one injection point)
 
-Full comprehensive regression on the H200 (cuOpt `26.10.00`). **Every failure was attributed by
-rebuilding stock `main` (`f3ebc673`) and re-running the same tests** — so "no regression" is proven,
-not asserted.
+The whole solver reads cost through a single chokepoint — `arc_value.hpp: get_distance → lookup_dist`.
+Native sparse adds a gated branch there (binary-search a sorted K-NN row) plus CSR storage in
+`md_utils.hpp` and a build hook in `fleet_info.cu`. Three files, ~175 lines, all gated. The exact diff is
+`native-sparse/native-sparse-core.patch`.
 
-| Suite | Result | Notes |
-|-------|--------|-------|
-| C++ `ROUTING_UNIT_TEST` | **53 / 53 pass** | includes EV `distance_breaks` 5/5 |
-| C++ `ROUTING_INTERNAL_TEST` | **52 / 52 pass** | |
-| C++ `ROUTING_L1TEST` | 1 pre-existing fail | `l1_homberger` `SetUp()` crash — fails on stock `main` too |
-| Python routing suite | **86 pass / 1 fail** | after enhancements (was 84 / 3) |
+## How to use it
 
-### Failure attribution (rebuild-and-compare vs stock `main`)
-
-| Failure | Stock `main` | EV build | Verdict |
-|---------|--------------|----------|---------|
-| `l1_homberger` | FAILS | FAILS | **Pre-existing** infra crash — not a regression |
-| `test_serialize` | PASS | was FAIL | **Our** integration gap → fixed (serialize handler) |
-| `test_range` | PASS (`≤3`) | was FAIL (`≤2`) | **PR's own off-by-one correctness fix** — stale test aligned |
-| `test_solve_full_feature_api` | n/a | FAIL | **Documented** multi-cycle `d_min` (soft-by-design) |
-
-**No functional or performance regression is introduced by adopting the EV feature.** Full narrative:
-`docs/REGRESSION-ANALYSIS-AND-ENHANCEMENTS.md`.
-
-## Performance benchmark (cuOpt's own methodology)
-
-We adopt **cuOpt's own routing benchmark methodology** (`regression/benchmark_scripts/benchmark.py`):
-report the **gap to the Best-Known Solution (BKS)** — `|((achieved − BKS) / BKS) × 100|` — on standard
-academic instances, where cuOpt's default regression threshold is **5%**.
-
-![EV distance-breaks add no measurable cost — solve time and gap-to-BKS, feature OFF vs ON](docs/assets/benchmark-parity.png)
-
-On Solomon **r107** (BKS cost 1080.92, 11 vehicles), cuOpt reaches **~1% of best-known** within seconds,
-and the EV distance-break feature **ON vs OFF is within noise on both solve time and quality**
-(10.08 s / 0.58% vs 10.12 s / 0.66%) — i.e. **no measurable performance cost** when the feature is used.
-Full tables, scaling sweep, and honest caveats: `benchmark/README.md`.
-
-## What's genuinely new here (our contribution)
-
-Since PR #1196 branched, cuOpt `main` refactored `DataModel` to a **store-then-build (deferred)** model.
-The PR predates it, so the EV setter wasn't wired into the new machinery. These enhancements finish it:
-
-1. **`_distance_break` serialization handler** (`_serialize.py`) — makes the EV setter serializable
-   through the deferred model (mirrors `_vehicle_break`, keyed by distance). Verified incl. round-trip.
-2. **`_SETTERS` registration** of `add_distance_break` (`_deferred.py`).
-3. **Alignment of a stale range-validation test** with the PR's own off-by-one correctness fix
-   (`get_num_locations()` → `-1`).
-
-All three are in `enhancements/integration-fixes.patch` (apply on top of PR #1196).
-
-## Repository layout
-
-```
-docs/                 build + validation + regression reports (deep detail)
-enhancements/         integration-fixes.patch (the code changes)
-scripts/              phase0_bootstrap.sh (one-shot from-source build)
-analysis/             feasibility study, cited to cuopt source file:line
-feature1-ev-charging/ notes + how the enhancements complete PR #1196
-feature2-skill-match/ prize-pattern repro scripts + results
-feature3-time-of-day/ Tier-A prototype + measured results
-feature4-sparse/      plan for the separate sparse-matrix workstream
-benchmark/            gap-to-BKS benchmark (adapts cuOpt's own methodology) + results
-bundle/               git bundle of the validated branch (importable)
-```
-
-## Reproduce
+- **Full guide:** [`native-sparse/PRODUCTION-USAGE.md`](native-sparse/PRODUCTION-USAGE.md) — build, deploy,
+  use, tune.
+- **Tested example:** [`native-sparse/production_usage_example.py`](native-sparse/production_usage_example.py)
+  (runs green: feasible sparse solve, 5× memory reduction at n=500).
 
 ```bash
-# 1. From-source build on any Linux GPU box (CUDA 13 driver, >=120 GB disk)
-bash scripts/phase0_bootstrap.sh            # -> import cuopt 26.10.00 + 57 tests pass
-
-# 2. Adopt EV + apply enhancements, then validate  (see docs/COMMANDS-RUNBOOK.md)
-git apply enhancements/integration-fixes.patch   # on top of a PR-#1196 merge
+# build cuOpt with the patch, then:
+export CUOPT_SPARSE_K=50                       # keep 50 nearest neighbours per stop
+# ... build DataModel as usual, then apply the fix:
+dm.set_vehicle_max_costs([max_route_cost]*fleet)   # > real route, << 1e6 sentinel
+sol = Solve(dm, settings)                          # verify status==0 and objective < 1e6
 ```
 
-## Open question for the maintainers
+## Current state & what's next (B5+)
 
-Multi-cycle distance-breaks: the lower bound `d_min` is **soft** (mirrors time-window "waiting"); the
-range-critical upper bound `d_max` **is** hard-enforced (→ infeasible), so it is **not** a safety bug.
-Should `d_min` be hard for *distance* breaks so stacked cycles don't collapse into the earliest window?
-Detail in `docs/BUILD-VALIDATION-REPORT.md` section 4.6.
+This is a **validated prototype**, not yet a shipping feature. The remaining work is a **bounded list**,
+not a rewrite:
 
-## Relationship to NVIDIA/cuOpt
+1. **Direct CSR ingestion API** (`add_cost_matrix_csr`) — client sends K-NN directly; dense is *never*
+   built → a true never-build-dense **100k** demonstration.
+2. **`SPARSE_ARC` infeasibility dimension** — productionise the fix (no co-opting max-cost).
+3. **Sparse the time matrix** too; **connectivity-preserving CSR** to lower K.
 
-This repository is an independent, Apache-2.0 companion to `NVIDIA/cuopt`. It contains no cuOpt source;
-the EV feature is NVIDIA's PR #1196 (credited), and the enhancements are offered upstream for review.
-See `NOTICE`.
+Full findings: [`native-sparse/OPTION-D-RESULTS.md`](native-sparse/OPTION-D-RESULTS.md) ·
+plan/architecture map: [`native-sparse/OPTION-D-native-sparse-plan.md`](native-sparse/OPTION-D-native-sparse-plan.md) ·
+raw logs: `native-sparse/logs/`.
+
+---
+
+*Apache-2.0. Independent companion to [NVIDIA/cuopt](https://github.com/NVIDIA/cuopt); contains no cuOpt
+source (the solver changes are provided as a patch). See `NOTICE`.*

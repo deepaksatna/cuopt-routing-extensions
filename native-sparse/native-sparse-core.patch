@@ -1,0 +1,175 @@
+diff --git a/cpp/src/routing/arc_value.hpp b/cpp/src/routing/arc_value.hpp
+index 77f41805..3b7e3275 100644
+--- a/cpp/src/routing/arc_value.hpp
++++ b/cpp/src/routing/arc_value.hpp
+@@ -34,6 +34,10 @@ constexpr void get_row_and_col_index(i_t& row, i_t& col, i_t flat_index, i_t nod
+   col = flat_index + row + 1 - nodes * (nodes - 1) / 2 + (nodes - row) * ((nodes - row) - 1) / 2;
+ }
+ 
++// Sentinel cost for an (i,j) pair absent from a sparse cost matrix (Option D):
++// large but finite so route-cost accumulation stays well-defined.
++constexpr double BIG_COST = 1e6;
++
+ template <typename i_t, typename f_t>
+ constexpr double lookup_dist(f_t const* table, i_t i, i_t j, size_t width)
+ {
+@@ -54,6 +58,22 @@ static constexpr double get_distance(const NodeInfo<i_t>& l1,
+ {
+   if (vehicle_info.skip_first_trip && l1.node_type() == node_type_t::DEPOT) { return 0.f; }
+   if (vehicle_info.drop_return_trip && l2.node_type() == node_type_t::DEPOT) { return 0.f; }
++  // Native sparse (Option D): read the CSR cost matrix directly (O(log K) binary search)
++  // instead of the dense O(1) index. Gated -- dense problems never enter this branch.
++  if (vehicle_info.matrices.has_sparse_cost) {
++    const auto& m = vehicle_info.matrices;
++    const auto i  = l1.location();
++    const auto j  = l2.location();
++    int lo = m.csr_offsets[i];
++    int hi = m.csr_offsets[i + 1];
++    while (lo < hi) {
++      const int mid = (lo + hi) >> 1;
++      const int c   = m.csr_indices[mid];
++      if (c == j) return m.csr_values[mid];
++      if (c < j) { lo = mid + 1; } else { hi = mid; }
++    }
++    return BIG_COST;
++  }
+   auto matrix = vehicle_info.matrices.get_cost_matrix(vehicle_info.type);
+   return lookup_dist(matrix, l1.location(), l2.location(), vehicle_info.matrices.extent[3]);
+ }
+diff --git a/cpp/src/routing/fleet_info.cu b/cpp/src/routing/fleet_info.cu
+index 317191f5..efe2d628 100644
+--- a/cpp/src/routing/fleet_info.cu
++++ b/cpp/src/routing/fleet_info.cu
+@@ -5,6 +5,7 @@
+  */
+ /* clang-format on */
+ #include <routing/fleet_info.hpp>
++#include <cstdlib>
+ #include <utilities/copy_helpers.hpp>
+ #include <utilities/vector_helpers.cuh>
+ 
+@@ -54,6 +55,9 @@ void populate_matrices(data_model_view_t<i_t, f_t> const& data_model, d_mdarray_
+   matrices_ =
+     detail::create_device_mdarray<f_t>(nlocations, n_vehicle_types, n_matrix_types, stream_view_);
+   detail::fill_mdarray_from_data_model(matrices_, data_model);
++  // Native sparse (Option D) prototype hook: CUOPT_SPARSE_K=<K> builds a CSR from the dense
++  // matrix (K>=n or <=0 = lossless) and flips the solver to the sparse read path.
++  if (const char* ks = std::getenv("CUOPT_SPARSE_K")) { matrices_.build_csr(std::atoi(ks)); }
+ }
+ 
+ template <typename i_t, typename f_t>
+diff --git a/cpp/src/routing/utilities/md_utils.hpp b/cpp/src/routing/utilities/md_utils.hpp
+index 7de1be3f..7c608977 100644
+--- a/cpp/src/routing/utilities/md_utils.hpp
++++ b/cpp/src/routing/utilities/md_utils.hpp
+@@ -15,6 +15,7 @@
+ #include <rmm/device_uvector.hpp>
+ #include <utilities/copy_helpers.hpp>
+ #include <utilities/macros.cuh>
++#include <algorithm>
+ #include <vector>
+ 
+ namespace cuopt {
+@@ -46,6 +47,11 @@ struct mdarray_view_t {
+   f_t const* buffer_ptr{nullptr};
+   // dim4(n_vehicle_types, n_matrix_types, n_loc, n_loc)
+   size_t extent[NCON_DIMS];
++  // --- native sparse (Option D) scaffolding; inert unless has_sparse_cost is set ---
++  bool has_sparse_cost{false};
++  const int* csr_offsets{nullptr};  // [n_loc + 1] row offsets (cost matrix)
++  const int* csr_indices{nullptr};  // [nnz] column indices, sorted within each row
++  f_t const* csr_values{nullptr};   // [nnz] cost values
+ };
+ 
+ template <typename f_t, size_t NCON_DIMS = 4>
+@@ -95,9 +101,9 @@ struct h_mdarray_t {
+ 
+ template <typename f_t, size_t NCON_DIMS = 4>
+ struct d_mdarray_t {
+-  d_mdarray_t(rmm::cuda_stream_view stream_) : buffer(0, stream_), stream(stream_) {}
++  d_mdarray_t(rmm::cuda_stream_view stream_) : buffer(0, stream_), stream(stream_), csr_offsets(0, stream_), csr_indices(0, stream_), csr_values(0, stream_) {}
+   d_mdarray_t(std::vector<size_t> const& extent_, rmm::cuda_stream_view stream_)
+-    : buffer(0, stream_), stream(stream_)
++    : buffer(0, stream_), stream(stream_), csr_offsets(0, stream_), csr_indices(0, stream_), csr_values(0, stream_)
+   {
+     cuopt_assert(extent_.size() == NCON_DIMS, "Wrong dimensions");
+     size_t size = 1;
+@@ -133,12 +139,78 @@ struct d_mdarray_t {
+     for (size_t i = 0; i < NCON_DIMS; ++i) {
+       view.extent[i] = extent[i];
+     }
++    if (sparse_built) {
++      view.has_sparse_cost = true;
++      view.csr_offsets     = csr_offsets.data();
++      view.csr_indices     = csr_indices.data();
++      view.csr_values      = csr_values.data();
++    }
+     return view;
+   }
+ 
++  // Native sparse (Option D) prototype: build a CSR from the dense cost matrix.
++  // K <= 0 or K >= n keeps all entries (lossless); otherwise keep the K smallest-cost
++  // columns per row (K-NN). Columns are sorted so the device lookup can binary-search.
++  void build_csr(int K)
++  {
++    const int n = static_cast<int>(extent[3]);
++    if (n <= 0) { return; }
++    std::vector<f_t> dense(static_cast<size_t>(n) * static_cast<size_t>(n));
++    cudaMemcpyAsync(dense.data(), get_cost_matrix(0), sizeof(f_t) * dense.size(),
++                    cudaMemcpyDeviceToHost, stream.value());
++    stream.synchronize();
++    std::vector<int> h_off(static_cast<size_t>(n) + 1, 0);
++    std::vector<int> h_idx;
++    std::vector<f_t> h_val;
++    std::vector<int> cols(static_cast<size_t>(n));
++    std::vector<int> sel;
++    for (int i = 0; i < n; ++i) {
++      const size_t row = static_cast<size_t>(i) * static_cast<size_t>(n);
++      sel.clear();
++      if (i == 0 || K <= 0 || K >= n) {
++        // depot row (and lossless mode): keep every column so the depot reaches all nodes
++        for (int j = 0; j < n; ++j) { sel.push_back(j); }
++      } else {
++        for (int j = 0; j < n; ++j) { cols[static_cast<size_t>(j)] = j; }
++        std::nth_element(cols.begin(), cols.begin() + K, cols.end(),
++                         [&](int a, int b) {
++                           return dense[row + static_cast<size_t>(a)] <
++                                  dense[row + static_cast<size_t>(b)];
++                         });
++        sel.assign(cols.begin(), cols.begin() + K);
++        sel.push_back(0);  // depot connectivity: guarantees return-to-depot is feasible
++        sel.push_back(i);  // self
++        std::sort(sel.begin(), sel.end());
++        sel.erase(std::unique(sel.begin(), sel.end()), sel.end());
++      }
++      for (size_t t = 0; t < sel.size(); ++t) {
++        const int c = sel[t];
++        h_idx.push_back(c);
++        h_val.push_back(dense[row + static_cast<size_t>(c)]);
++      }
++      h_off[static_cast<size_t>(i) + 1] =
++        h_off[static_cast<size_t>(i)] + static_cast<int>(sel.size());
++    }
++    csr_offsets.resize(h_off.size(), stream);
++    csr_indices.resize(h_idx.size(), stream);
++    csr_values.resize(h_val.size(), stream);
++    cudaMemcpyAsync(csr_offsets.data(), h_off.data(), sizeof(int) * h_off.size(),
++                    cudaMemcpyHostToDevice, stream.value());
++    cudaMemcpyAsync(csr_indices.data(), h_idx.data(), sizeof(int) * h_idx.size(),
++                    cudaMemcpyHostToDevice, stream.value());
++    cudaMemcpyAsync(csr_values.data(), h_val.data(), sizeof(f_t) * h_val.size(),
++                    cudaMemcpyHostToDevice, stream.value());
++    stream.synchronize();
++    sparse_built = true;
++  }
++
+   size_t extent[NCON_DIMS];
+   rmm::device_uvector<f_t> buffer;
+   rmm::cuda_stream_view stream;
++  rmm::device_uvector<int> csr_offsets;
++  rmm::device_uvector<int> csr_indices;
++  rmm::device_uvector<f_t> csr_values;
++  bool sparse_built{false};
+ };
+ 
+ namespace detail {

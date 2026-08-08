@@ -1,0 +1,48 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="760" height="410" viewBox="0 0 760 410" font-family="-apple-system,BlinkMacSystemFont,Segoe UI,Helvetica,Arial,sans-serif" role="img" aria-label="GPU cost-matrix memory vs stops, log scale: dense N-squared crosses typical GPU memory near 50k-100k stops (40 GB at 100k); top-K CSR stays in megabytes (13 MB at 100k, K=16).">
+  <rect x="0.5" y="0.5" width="759" height="409" rx="12" fill="#ffffff" stroke="#d0d7de"/>
+  <text x="28" y="38" font-size="19" font-weight="700" fill="#1f2328">Native sparse — GPU cost-matrix memory vs stops</text>
+  <text x="28" y="59" font-size="12.5" fill="#656d76">dense O(N²) (N²·4 B) vs top-K CSR O(N·K) (N·K·8 B, K=16) · log scale · cuOpt 26.10.00</text>
+
+  <!-- plot area x 100..620, y 60..300 ; log-y 100KB(1e5)..100GB(1e11), 40 px/decade -->
+  <line x1="100" y1="260" x2="620" y2="260" stroke="#eaeef2"/>
+  <text x="92" y="264" font-size="11" fill="#8b949e" text-anchor="end">1 MB</text>
+  <line x1="100" y1="140" x2="620" y2="140" stroke="#eaeef2"/>
+  <text x="92" y="144" font-size="11" fill="#8b949e" text-anchor="end">1 GB</text>
+  <line x1="100" y1="60" x2="620" y2="60" stroke="#eaeef2"/>
+  <text x="92" y="64" font-size="11" fill="#8b949e" text-anchor="end">100 GB</text>
+
+  <!-- typical GPU memory band 24-80 GB (y 85..64) -->
+  <rect x="100" y="64" width="520" height="21" fill="#fff1e5" opacity="0.9"/>
+  <text x="616" y="79" font-size="10.5" font-weight="700" fill="#9a6700" text-anchor="end">typical GPU memory (24–80 GB)</text>
+
+  <!-- x labels -->
+  <g font-size="11" fill="#656d76" text-anchor="middle">
+    <text x="130" y="318">1,000</text>
+    <text x="290" y="318">10,000</text>
+    <text x="450" y="318">50,000</text>
+    <text x="610" y="318">100,000</text>
+  </g>
+  <text x="360" y="340" font-size="12" fill="#656d76" text-anchor="middle">stops</text>
+
+  <!-- dense N^2 (orange, rising into GPU band) -->
+  <polyline fill="none" stroke="#bc4c00" stroke-width="2.5" points="130,236 290,156 450,100 610,76"/>
+  <g fill="#bc4c00">
+    <circle cx="130" cy="236" r="4"/><circle cx="290" cy="156" r="4"/><circle cx="450" cy="100" r="4"/><circle cx="610" cy="76" r="4"/>
+  </g>
+  <text x="610" y="70" font-size="11" font-weight="700" fill="#bc4c00" text-anchor="end">40 GB @ 100k → won't fit</text>
+
+  <!-- top-K CSR (blue, flat in MB) -->
+  <polyline fill="none" stroke="#0969da" stroke-width="2.5" points="130,296 290,256 450,228 610,216"/>
+  <g fill="#0969da">
+    <circle cx="130" cy="296" r="4"/><circle cx="290" cy="256" r="4"/><circle cx="450" cy="228" r="4"/><circle cx="610" cy="216" r="4"/>
+  </g>
+  <text x="610" y="233" font-size="11" font-weight="700" fill="#0969da" text-anchor="end">13 MB @ 100k (K=16)</text>
+
+  <!-- legend -->
+  <rect x="110" y="352" width="14" height="10" rx="2" fill="#bc4c00"/>
+  <text x="130" y="361" font-size="12" fill="#1f2328">Dense O(N²) — crosses GPU memory near 50–100k stops</text>
+  <rect x="470" y="352" width="14" height="10" rx="2" fill="#0969da"/>
+  <text x="490" y="361" font-size="12" fill="#1f2328">Top-K CSR O(N·K) — megabytes</text>
+
+  <text x="28" y="388" font-size="11.5" fill="#656d76">Measured: read-path correct, no lookup overhead, feasible at n≤250 (K tuned); K/N shrinks with N. Memory at 100k is the O(N·K) model.</text>
+</svg>

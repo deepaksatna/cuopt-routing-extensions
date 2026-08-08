@@ -1,0 +1,6 @@
+=== BIG_COST=1e6 (navigable sentinel) test ===
+  n=100 K=15: status=0  FEASIBLE gap=-0.1%
+  n=250 K=30: status=0  ~1 missing-arc(s), obj=1012640
+  n=250 K=20: status=0  FEASIBLE gap=+4.8%
+  n=500 K=40: status=0  ~1 missing-arc(s), obj=1017866
+SENTINEL_DONE

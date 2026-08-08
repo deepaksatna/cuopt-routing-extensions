@@ -1,0 +1,20 @@
+=== K for TRUE feasibility (0 missing arcs) with navigable sentinel (BIG_COST=1e6) ===
+n=100 dense obj=8009:
+  K= 20: FEASIBLE +0.5%  (csr 16KB vs dense 0.0MB, 2x)
+  K= 30: FEASIBLE +0.6%  (csr 24KB vs dense 0.0MB, 2x)
+  K= 40: FEASIBLE -0.3%  (csr 32KB vs dense 0.0MB, 1x)
+  K= 60: FEASIBLE -0.4%  (csr 48KB vs dense 0.0MB, 1x)
+  K= 80: FEASIBLE +0.4%  (csr 64KB vs dense 0.0MB, 1x)
+n=250 dense obj=12363:
+  K= 20: NOT-yet: 3 missing-arc(s)  (csr 40KB vs dense 0.2MB, 6x)
+  K= 30: NOT-yet: 1 missing-arc(s)  (csr 60KB vs dense 0.2MB, 4x)
+  K= 40: FEASIBLE -0.7%  (csr 80KB vs dense 0.2MB, 3x)
+  K= 60: FEASIBLE +3.5%  (csr 120KB vs dense 0.2MB, 2x)
+  K= 80: FEASIBLE -1.0%  (csr 160KB vs dense 0.2MB, 2x)
+n=500 dense obj=17561:
+  K= 20: NOT-yet: 5 missing-arc(s)  (csr 80KB vs dense 1.0MB, 12x)
+  K= 30: NOT-yet: 4 missing-arc(s)  (csr 120KB vs dense 1.0MB, 8x)
+  K= 40: NOT-yet: 1 missing-arc(s)  (csr 160KB vs dense 1.0MB, 6x)
+  K= 60: NOT-yet: 2 missing-arc(s)  (csr 240KB vs dense 1.0MB, 4x)
+  K= 80: NOT-yet: 1 missing-arc(s)  (csr 320KB vs dense 1.0MB, 3x)
+FINAL_KSWEEP_DONE
