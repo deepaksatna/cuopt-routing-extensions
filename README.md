@@ -47,9 +47,10 @@ O(N²) — the path to **100k+ stop** routing that dense cannot reach.
 
 ## Validated on A10 (`sm_86`) — full report
 
-The feature was rebuilt for **A10-class GPUs (`sm_86`)** and re-benchmarked, reproducing the H200 findings
-on smaller, widely-deployed hardware. Build green, dense byte-identical, **every case feasible**, no lookup
-overhead, and the memory saving holds: **303× at 10k → 3,030× at 100k** stops.
+The feature was rebuilt for **A10-class GPUs (`sm_86`)** and re-benchmarked on a **2× A10 node**,
+reproducing the H200 findings on smaller, widely-deployed hardware. Build green, dense byte-identical,
+**every case feasible**, no lookup overhead, and the memory saving holds: **303× at 10k → 3,030× at 100k**
+stops.
 
 **Full write-up + plots:** [`native-sparse/A10-BENCHMARK-REPORT.md`](native-sparse/A10-BENCHMARK-REPORT.md)
 

@@ -1,11 +1,12 @@
 # Native sparse on A10 (sm_86) — benchmark report
 
-Validation of the native-sparse cost-matrix feature on **A10-class GPU hardware (sm_86)**, reproducing the
-earlier H200 (sm_90) findings on a smaller, widely-deployed GPU. This confirms the feature is not
+Validation of the native-sparse cost-matrix feature on a **2× A10 GPU node (sm_86)**, reproducing the
+earlier H200 (sm_90) findings on smaller, widely-deployed GPUs. This confirms the feature is not
 lab-only: it **builds and runs feasibly on A10** and directly resolves the scaling limit the earlier
-payload benchmark surfaced.
+payload benchmark surfaced. Everything in this report — build, feasibility, overhead, memory model — was
+produced on this 2× A10 node.
 
-- **Hardware:** A10 GPU, `sm_86`, driver 580 / CUDA 13
+- **Hardware:** a node with **two A10 GPUs** (`sm_86`), driver 580 / CUDA 13 — build and benchmark ran on this 2× A10 node
 - **Build:** cuOpt `26.10.00` (base `f3ebc673`) + `native-sparse-core.patch`, compiled `CUDAARCHS=86`
 - **Packaging:** self-contained beta container image (conda env with the sparse cuOpt build)
 
