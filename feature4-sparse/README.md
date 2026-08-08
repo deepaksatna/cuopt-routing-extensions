@@ -16,7 +16,7 @@ it is the study's one genuine multi-week R&D area. Everything here is measured o
 
 ## The result in one picture
 
-![API payload vs stops — dense JSON crosses the 2 GB wall at ~7,700 stops; Option A (coordinates) stays a few KB](../docs/assets/sparse-payload.svg)
+![API payload vs stops — dense JSON crosses the 2 GB wall at ~7,700 stops; Option A (coordinates) stays a few KB](../docs/assets/sparse-payload.png)
 
 ## End-to-end tests (regressive, with PASS/FAIL checks)
 

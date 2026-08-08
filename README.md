@@ -43,7 +43,12 @@ We also, separately and with evidence, flag a **pre-existing** `l1_homberger` re
 | 1 | **EV charging stops** (distance-windowed mandatory recharge) | ✅ Validated | Adopt **[PR #1196](https://github.com/NVIDIA/cuopt/pull/1196)** + 3 integration enhancements |
 | 2 | **Skill-match honoured in partial solutions** | ✅ Validated | **Prize pattern** (per NVIDIA guidance) — no source change |
 | 3 | **Time-of-day / rush-hour travel times** | ✅ Validated | Application-layer **Tier A** — no solver change |
-| 4 | **Native sparse (K-NN) cost matrices** | ⏳ Separate workstream | See `feature4-sparse/` |
+| 4 | **Sparse / large-scale cost matrices** | 🔬 **This branch:** Option A (payload fix) | Server-side matrix generation — see below |
+
+> **You are on the `feature/sparse-matrix` branch.** It adds **Feature 4 — Option A (server-side matrix
+> generation)**, an application/server-layer fix for the 2 GB payload wall — **no cuOpt solver-core
+> change**. Native sparse (Option D, C++) is separate R&D on its own branch. Details + scripts in
+> [`feature4-sparse/`](feature4-sparse/).
 
 ## Headline results (measured on an H200; also reproduced on 2×A10)
 
@@ -55,7 +60,7 @@ We also, separately and with evidence, flag a **pre-existing** `l1_homberger` re
 
 ## Regression & test results
 
-![cuOpt routing regression and EV validation — 192 tests run, 191 passing, 1 documented, 1 pre-existing](docs/assets/regression-results.svg)
+![cuOpt routing regression and EV validation — 192 tests run, 191 passing, 1 documented, 1 pre-existing](docs/assets/regression-results.png)
 
 Full comprehensive regression on the H200 (cuOpt `26.10.00`). **Every failure was attributed by
 rebuilding stock `main` (`f3ebc673`) and re-running the same tests** — so "no regression" is proven,
@@ -86,12 +91,29 @@ We adopt **cuOpt's own routing benchmark methodology** (`regression/benchmark_sc
 report the **gap to the Best-Known Solution (BKS)** — `|((achieved − BKS) / BKS) × 100|` — on standard
 academic instances, where cuOpt's default regression threshold is **5%**.
 
-![EV distance-breaks add no measurable cost — solve time and gap-to-BKS, feature OFF vs ON](docs/assets/benchmark-parity.svg)
+![EV distance-breaks add no measurable cost — solve time and gap-to-BKS, feature OFF vs ON](docs/assets/benchmark-parity.png)
 
 On Solomon **r107** (BKS cost 1080.92, 11 vehicles), cuOpt reaches **~1% of best-known** within seconds,
 and the EV distance-break feature **ON vs OFF is within noise on both solve time and quality**
 (10.08 s / 0.58% vs 10.12 s / 0.66%) — i.e. **no measurable performance cost** when the feature is used.
 Full tables, scaling sweep, and honest caveats: `benchmark/README.md`.
+
+## Feature 4 — sparse / large-scale (this branch)
+
+cuOpt's solver consumes a **dense N×N** matrix and the API expands even sparse input to dense, so the
+**JSON payload grows as ~36·N²** and hits the **2 GB API limit near ~7,700 stops**. **Option A** sends
+**coordinates** instead of the matrix; the server builds it on the GPU — removing the *measured*
+bottleneck with **no solver-core change**.
+
+![API payload vs stops — dense JSON crosses the 2 GB wall at ~7,700 stops; Option A (coordinates) stays a few KB](docs/assets/sparse-payload.png)
+
+- **Up to 45,000× payload reduction**; Option A **solves at 7,500 and 8,000 stops (status 0)** where the
+  dense JSON payload (2.0–2.3 GB) exceeds the API limit.
+- **Correctness proven:** the server-built matrix is numerically identical to the client-built one
+  (matrix-equivalence PASS at all sizes).
+- **Honest scope:** Option A removes the *payload* wall, not the solver's dense **O(N²)** memory; 100k+
+  needs native sparse (**Option D**, C++ R&D — separate branch). Full detail + scripts:
+  [`feature4-sparse/`](feature4-sparse/).
 
 ## What's genuinely new here (our contribution)
 
