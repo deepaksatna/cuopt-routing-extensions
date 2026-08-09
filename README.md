@@ -43,7 +43,21 @@ We also, separately and with evidence, flag a **pre-existing** `l1_homberger` re
 | 1 | **EV charging stops** (distance-windowed mandatory recharge) | ✅ Validated | Adopt **[PR #1196](https://github.com/NVIDIA/cuopt/pull/1196)** + 3 integration enhancements |
 | 2 | **Skill-match honoured in partial solutions** | ✅ Validated | **Prize pattern** (per NVIDIA guidance) — no source change |
 | 3 | **Time-of-day / rush-hour travel times** | ✅ Validated | Application-layer **Tier A** — no solver change |
-| 4 | **Native sparse (K-NN) cost matrices** | ⏳ Separate workstream | See `feature4-sparse/` |
+| 4 | **Native sparse (K-NN) cost matrices** | ✅ Solver read path + REST ingestion | On the **`sparse-matrix-native`** branch (see Branches) |
+
+## Branches — where to look
+
+This `main` branch is the **EV + regression** story (Features 1–3, no solver-core change). The sparse work
+(Feature 4) lives on dedicated branches so each can be reviewed independently:
+
+| Branch | What it contains | Touches solver core? |
+|--------|------------------|----------------------|
+| **`main`** *(here)* | Features 1–3: EV (PR #1196) integration + regression attribution, skill-match (prizes), time-of-day (Tier A). All Python glue / tests. | No |
+| **[`sparse-matrix-native`](../../tree/sparse-matrix-native)** | **Feature 4 the deep way.** Native sparse (K-NN / CSR) cost read path **inside the cuOpt C++ solver** (`native-sparse-core.patch`, gated `has_sparse_cost`), validated on A10; **plus B5 CSR ingestion over REST** (delivered — the 2,290 MB dense payload that FAILED now submits as ~2.9 MB and solves). Memory O(N·K): 303× at 10k → 3,030× at 100k. | Yes (patch; source not committed) |
+| **[`feature/sparse-matrix`](../../tree/feature/sparse-matrix)** | **Feature 4 the light way (Option A).** Application-layer payload workaround — no solver change. The sibling to compare against the native branch. | No |
+
+> Reviewing sparse? Start on **`sparse-matrix-native`** — its README covers the solver read path, the A10
+> benchmark, and B5 CSR ingestion end-to-end, with plots.
 
 ## Headline results (measured on an H200; also reproduced on 2×A10)
 
@@ -116,7 +130,7 @@ analysis/             feasibility study, cited to cuopt source file:line
 feature1-ev-charging/ notes + how the enhancements complete PR #1196
 feature2-skill-match/ prize-pattern repro scripts + results
 feature3-time-of-day/ Tier-A prototype + measured results
-feature4-sparse/      plan for the separate sparse-matrix workstream
+feature4-sparse/      sparse-matrix plan (full work is on the sparse-matrix-native branch)
 benchmark/            gap-to-BKS benchmark (adapts cuOpt's own methodology) + results
 bundle/               git bundle of the validated branch (importable)
 ```
