@@ -108,18 +108,32 @@ dm.set_vehicle_max_costs([max_route_cost]*fleet)   # > real route, << 1e6 sentin
 sol = Solve(dm, settings)                          # verify status==0 and objective < 1e6
 ```
 
-## Current state & what's next (B5+)
+## B5 — CSR ingestion over REST (DELIVERED) ✅
 
-This is a **validated prototype**, not yet a shipping feature. The remaining work is a **bounded list**,
-not a rewrite:
+The solver reads CSR; **B5 lets a client *send* one.** A `cost_matrix_csr` REST field carries the K-NN graph
+directly, so the 10k payload that FAILED (2,290 MB dense) now submits as **2.9–12.7 MB** and the server
+solves it (status 0, feasible). Same K-NN generator, same 10k scenario as the earlier benchmark.
 
-1. **Direct CSR ingestion API** (`add_cost_matrix_csr`) — client sends K-NN directly; dense is *never*
-   built → a true never-build-dense **100k** demonstration.
+| Stops | K | CSR request payload | Prior augmented-dense | Prior | **B5** |
+|-------|---|---------------------|------------------------|-------|--------|
+| 10,000 | 10 | **2.94 MB** | 2,290.5 MB | ❌ FAIL | ✅ **PASS · HTTP 200** |
+| 10,000 | 20 | **5.39 MB** | 2,292.0 MB | ❌ FAIL | ✅ **PASS · HTTP 200** |
+| 10,000 | 50 | **12.68 MB** | 2,296.5 MB | ❌ FAIL | ✅ **PASS · HTTP 200** |
+
+- **Full write-up:** [`native-sparse/B5-CSR-INGESTION.md`](native-sparse/B5-CSR-INGESTION.md)
+- **Server patch:** [`native-sparse/b5-server-csr.patch`](native-sparse/b5-server-csr.patch) (~87 lines) ·
+  **benchmark:** [`native-sparse/b5_csr_benchmark.py`](native-sparse/b5_csr_benchmark.py) ·
+  **results:** [`native-sparse/b5_csr_results.json`](native-sparse/b5_csr_results.json)
+
+## What's next
+
+B5 reconstructs the matrix server-side (dense internally, good to ~10k on a 24 GB GPU). The remaining work is
+a **bounded list**, not a rewrite:
+
+1. **Never-materialize-dense C++ `add_cost_matrix_csr`** — the solver holds only the CSR → true **100k** on
+   one GPU. Plan: [`native-sparse/B5-PLAN-direct-csr-ingestion.md`](native-sparse/B5-PLAN-direct-csr-ingestion.md).
 2. **`SPARSE_ARC` infeasibility dimension** — productionise the fix (no co-opting max-cost).
 3. **Sparse the time matrix** too; **connectivity-preserving CSR** to lower K.
-
-Detailed, file-by-file implementation plan for step 1 (the payload win):
-[`native-sparse/B5-PLAN-direct-csr-ingestion.md`](native-sparse/B5-PLAN-direct-csr-ingestion.md).
 
 Full findings: [`native-sparse/OPTION-D-RESULTS.md`](native-sparse/OPTION-D-RESULTS.md) ·
 plan/architecture map: [`native-sparse/OPTION-D-native-sparse-plan.md`](native-sparse/OPTION-D-native-sparse-plan.md) ·

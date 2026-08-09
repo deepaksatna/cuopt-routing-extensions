@@ -1,0 +1,158 @@
+diff --git a/python/cuopt_server/cuopt_server/utils/routing/data_definition.py b/python/cuopt_server/cuopt_server/utils/routing/data_definition.py
+index 1991a742..151471c8 100644
+--- a/python/cuopt_server/cuopt_server/utils/routing/data_definition.py
++++ b/python/cuopt_server/cuopt_server/utils/routing/data_definition.py
+@@ -267,6 +267,30 @@ class CostMatrices(StrictModel):
+     )
+ 
+ 
++class CostMatrixCSR(StrictModel):
++    """B5: sparse (K-NN / CSR) cost matrix ingestion.
++
++    Lets the client send only each stop's nearest-neighbour arcs (O(N*K)) instead of the full
++    dense O(N^2) matrix, so a 10k-stop cost matrix travels as ~0.76 MB instead of ~2,290 MB
++    (past the 2 GB REST limit). Per vehicle-type CSR: row `offsets` [n+1], column `indices`
++    [nnz] (sorted within each row), and `values` [nnz]. Absent (i,j) pairs default to a large
++    finite sentinel server-side. n_locations is the square dimension.
++    """
++
++    n_locations: int = Field(
++        ..., description="Number of locations (square cost-matrix dimension)."
++    )
++    offsets: Dict[int, List[int]] = Field(
++        ..., description="vehicle-type -> CSR row offsets, length n_locations+1."
++    )
++    indices: Dict[int, List[int]] = Field(
++        ..., description="vehicle-type -> CSR column indices, length nnz, sorted within each row."
++    )
++    values: Dict[int, List[float]] = Field(
++        ..., description="vehicle-type -> CSR cost values, length nnz, cost >= 0."
++    )
++
++
+ class FleetData(StrictModel):
+     vehicle_locations: List[List[int]] = Field(
+         ...,
+@@ -788,6 +812,15 @@ class OptimizedRoutingData(StrictModel):
+             "vehicle type should be within [0, 255]"
+         ),
+     )
++    cost_matrix_csr: Optional[CostMatrixCSR] = Field(
++        default=None,
++        description=(
++            "B5: sparse (K-NN / CSR) cost matrix. Alternative to cost_matrix_data for large "
++            "problems -- the client sends only nearest-neighbour arcs (O(N*K)); the server "
++            "reconstructs the cost matrix. Provide exactly one of cost_matrix_data, "
++            "cost_waypoint_graph_data, or cost_matrix_csr."
++        ),
++    )
+     fleet_data: FleetData = Field(..., description=("All Fleet information"))
+     task_data: TaskData = Field(..., description=("All Task information"))
+     initial_solution: Optional[List[InitialSolution]] = None
+diff --git a/python/cuopt_server/cuopt_server/utils/routing/optimization_data_model.py b/python/cuopt_server/cuopt_server/utils/routing/optimization_data_model.py
+index 855938e8..86cd7d7f 100644
+--- a/python/cuopt_server/cuopt_server/utils/routing/optimization_data_model.py
++++ b/python/cuopt_server/cuopt_server/utils/routing/optimization_data_model.py
+@@ -436,6 +436,48 @@ class OptimizationDataModel:
+ 
+         return is_valid
+ 
++    def set_cost_matrix_csr(self, csr):
++        """B5: sparse (K-NN / CSR) cost-matrix ingestion.
++
++        The client sends only nearest-neighbour arcs (O(N*K)); we reconstruct the square cost
++        matrix server-side. Absent (i,j) pairs get a large finite sentinel (BIG_COST) so the
++        solver treats them as navigable-but-expensive (pair with vehicle_max_costs to forbid
++        them outright). This is the server-side reconstruction; a future never-materialize-dense
++        path lives in the C++ add_cost_matrix_csr API. Vectorized (O(nnz)), no Python row loop.
++        """
++        BIG_COST = 1.0e6
++
++        # csr may be a pydantic model (attrs) or a dict. Check dict FIRST -- a dict's
++        # built-in .values/.keys methods would shadow the data keys under getattr/hasattr.
++        def _get(obj, key):
++            if isinstance(obj, dict):
++                return obj[key]
++            return getattr(obj, key)
++
++        n = int(_get(csr, "n_locations"))
++        offsets = _get(csr, "offsets")
++        indices = _get(csr, "indices")
++        values = _get(csr, "values")
++
++        self.is_route_detail_set = True
++        self.cost_matrix = {}
++        for v_type in offsets.keys():
++            off = np.asarray(offsets[v_type], dtype=np.int64)
++            idx = np.asarray(indices[v_type], dtype=np.int64)
++            val = np.asarray(values[v_type], dtype=np.float32)
++            if off.shape[0] != n + 1:
++                return (False, "cost_matrix_csr.offsets must have length n_locations+1")
++            if idx.shape[0] != val.shape[0] or int(off[-1]) != idx.shape[0]:
++                return (False, "cost_matrix_csr indices/values length must equal offsets[-1]")
++            dense = np.full((n, n), BIG_COST, dtype=np.float32)
++            np.fill_diagonal(dense, 0.0)
++            counts = np.diff(off)
++            rows = np.repeat(np.arange(n, dtype=np.int64), counts)
++            dense[rows, idx] = val  # scatter the provided arcs
++            self.cost_matrix[int(v_type)] = cudf.DataFrame(dense)
++
++        return (True, "")
++
+     def set_travel_time_matrix(self, travel_time_matrix):
+         is_valid = validate_cost_matrix(
+             travel_time_matrix,
+diff --git a/python/cuopt_server/cuopt_server/utils/solver.py b/python/cuopt_server/cuopt_server/utils/solver.py
+index c5e41245..a2659611 100644
+--- a/python/cuopt_server/cuopt_server/utils/solver.py
++++ b/python/cuopt_server/cuopt_server/utils/solver.py
+@@ -135,6 +135,7 @@ def populate_optimization_data(
+     travel_time_waypoint_graph_data: Optional[WaypointGraphData] = None,
+     cost_matrix_data: Optional[CostMatrices] = None,
+     travel_time_matrix_data: Optional[CostMatrices] = None,
++    cost_matrix_csr=None,  # B5: sparse (K-NN/CSR) cost matrix
+     fleet_data: Optional[FleetData] = None,
+     task_data: Optional[TaskData] = None,
+     # Use the update data structure for the sync endpoint because
+@@ -151,9 +152,13 @@ def populate_optimization_data(
+     optimization_data = OptimizationDataModel()
+ 
+     if (
+-        not cost_waypoint_graph_data
+-        or not cost_waypoint_graph_data.waypoint_graph
+-    ) and (not cost_matrix_data or not cost_matrix_data.data):
++        (
++            not cost_waypoint_graph_data
++            or not cost_waypoint_graph_data.waypoint_graph
++        )
++        and (not cost_matrix_data or not cost_matrix_data.data)
++        and (not cost_matrix_csr)  # B5: CSR cost matrix also satisfies this
++    ):
+         raise HTTPException(
+             status_code=400,
+             detail="cost_matrix/waypoint_graph needs to be provided to find any route",  # noqa
+@@ -184,6 +189,8 @@ def populate_optimization_data(
+         )
+     elif cost_matrix_data and cost_matrix_data.data:
+         check_valid(optimization_data.set_cost_matrix(cost_matrix_data.data))
++    elif cost_matrix_csr:  # B5: sparse (K-NN/CSR) cost matrix -> reconstructed server-side
++        check_valid(optimization_data.set_cost_matrix_csr(cost_matrix_csr))
+ 
+     if (
+         travel_time_waypoint_graph_data
+@@ -275,6 +282,7 @@ def solve_optimized_routes_sync(
+     travel_time_waypoint_graph_data: Optional[WaypointGraphData] = None,
+     cost_matrix_data: Optional[CostMatrices] = None,
+     travel_time_matrix_data: Optional[CostMatrices] = None,
++    cost_matrix_csr=None,  # B5: sparse (K-NN/CSR) cost matrix
+     fleet_data: Optional[FleetData] = None,
+     task_data: Optional[TaskData] = None,
+     initial_solution: Optional[List[InitialSolution]] = None,
+@@ -292,6 +300,7 @@ def solve_optimized_routes_sync(
+         travel_time_waypoint_graph_data,
+         cost_matrix_data,
+         travel_time_matrix_data,
++        cost_matrix_csr,
+         fleet_data,
+         task_data,
+         initial_solution,
