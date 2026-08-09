@@ -53,8 +53,8 @@ This `main` branch is the **EV + regression** story (Features 1–3, no solver-c
 | Branch | What it contains | Touches solver core? |
 |--------|------------------|----------------------|
 | **`main`** *(here)* | Features 1–3: EV (PR #1196) integration + regression attribution, skill-match (prizes), time-of-day (Tier A). All Python glue / tests. | No |
-| **[`sparse-matrix-native`](../../tree/sparse-matrix-native)** | **Feature 4 the deep way.** Native sparse (K-NN / CSR) cost read path **inside the cuOpt C++ solver** (`native-sparse-core.patch`, gated `has_sparse_cost`), validated on A10; **plus B5 CSR ingestion over REST** (delivered — the 2,290 MB dense payload that FAILED now submits as ~2.9 MB and solves). Memory O(N·K): 303× at 10k → 3,030× at 100k. | Yes (patch; source not committed) |
-| **[`feature/sparse-matrix`](../../tree/feature/sparse-matrix)** | **Feature 4 the light way (Option A).** Application-layer payload workaround — no solver change. The sibling to compare against the native branch. | No |
+| **[`sparse-matrix-native`](https://github.com/deepaksatna/cuopt-routing-extensions/tree/sparse-matrix-native)** | **Feature 4 the deep way.** Native sparse (K-NN / CSR) cost read path **inside the cuOpt C++ solver** (`native-sparse-core.patch`, gated `has_sparse_cost`), validated on A10; **plus B5 CSR ingestion over REST** (delivered — the 2,290 MB dense payload that FAILED now submits as ~2.9 MB and solves). Memory O(N·K): 303× at 10k → 3,030× at 100k. | Yes (patch; source not committed) |
+| **[`feature/sparse-matrix`](https://github.com/deepaksatna/cuopt-routing-extensions/tree/feature/sparse-matrix)** | **Feature 4 the light way (Option A).** Application-layer payload workaround — no solver change. The sibling to compare against the native branch. | No |
 
 > Reviewing sparse? Start on **`sparse-matrix-native`** — its README covers the solver read path, the A10
 > benchmark, and B5 CSR ingestion end-to-end, with plots.
