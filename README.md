@@ -12,6 +12,25 @@
 
 ---
 
+## Where this fits — the four capabilities
+
+This repo covers four enterprise routing capabilities. **This branch is Feature 4** (the native-sparse
+solver change). The other three are independent and compose with it:
+
+| # | Capability | Status | Approach |
+|---|---|---|---|
+| 1 | **EV charging stops** (distance-windowed mandatory recharge) | ✅ Validated | Adopt **[PR #1196](https://github.com/NVIDIA/cuopt/pull/1196)** + 3 integration enhancements — a **separate solver patch** |
+| 2 | **Skill-match honoured in partial solutions** | ✅ Validated | **Prize pattern** (per NVIDIA guidance) — **no source change** |
+| 3 | **Time-of-day / rush-hour travel times** | ✅ Validated | Application-layer **Tier A** — **no solver change** |
+| 4 | **Native sparse cost matrix** (K-NN / CSR in the solver core) | ✅ Validated *(this branch)* | `native-sparse-core.patch` — gated `has_sparse_cost` CSR read path |
+
+**What that means for a build:** the native-sparse *binary* here contains **Feature 4 only**. Features 2
+and 3 need **no source change**, so they apply to this build as-is. Feature 1 (EV) is a **separate patch**
+(validated on its own branch); it touches different files and can be combined with native sparse, but this
+branch does not ship the merged EV+sparse binary. Full four-capability write-up is on the **`main`** branch.
+
+---
+
 ## Why this matters
 
 cuOpt's solver reads cost from a **dense N×N matrix**. At enterprise scale that memory grows
