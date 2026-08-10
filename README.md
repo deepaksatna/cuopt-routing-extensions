@@ -123,7 +123,9 @@ NVIDIA A10 (sm_86).
 ![Payload reduction by method](docs/assets/native-sparse-a10-payload-comparison.png)
 ![Cost-matrix memory, dense versus CSR](docs/assets/native-sparse-a10-memory-scaling.png)
 
-Full write-up: `native-sparse/A10-BENCHMARK-REPORT.md` and `native-sparse/B5-CSR-INGESTION.md`.
+Full write-up: `native-sparse/A10-BENCHMARK-REPORT.md` and `native-sparse/B5-CSR-INGESTION.md`. Annotated
+C++ walkthrough (read without applying the patch): `native-sparse/CPP-CHANGES.md`. Concrete input data
+(10,000 seeded stops plus the K-NN CSR, for inspection): `native-sparse/sample_data/`.
 
 Scope: this beta reconstructs the matrix server-side, which is suitable up to about 10,000 stops on a single
 GPU. The next step is a native C++ `add_cost_matrix_csr` that never materializes the dense matrix, giving
