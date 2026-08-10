@@ -1,52 +1,54 @@
-# Feature 4 — Sparse (K-NN) Cost-Matrix Support  *(separate workstream)*
+# Feature 4: Sparse (K-NN) cost-matrix support
 
-This is the **4th challenge**, kept deliberately separate from the three already validated
-(EV charging, skill-match, time-of-day). It is the one genuine multi-week R&D item in the study.
+Status: delivered and validated. The full implementation, benchmark, and results are in the `native-sparse/`
+folder at the repository root. This file is a short overview.
 
-> **The other three challenges are done and preserved separately:**
-> - EV charging (F1) + skill-match (F2) + time-of-day (F3) — validated on the H200.
-> - Their code lives on git branch **`feature/ev-distance-breaks-pr1196`** (commits `f2a75bdb`,
->   `59432cf9`) and their evidence in **`cuOPT-Dev/worklog/`** + **`cuOPT-Dev/phase1-time-of-day/`**.
-> - Sparse work here will use its **own branch off `main`** (independent of the EV branch) so the two
->   never entangle.
+## Problem
 
-## The problem (measured in the an internal POC — see `analysis/05`)
+cuOpt's solver reads cost from a dense N-by-N matrix, and the REST API accepts only a dense cost matrix. A
+sparse K-nearest-neighbour input must be re-expanded to dense before solving, so the JSON payload grows on
+the order of N squared and reaches the 2 GB REST limit at about 7,500 stops. A 10,000-stop dense cost matrix
+is about 2,290 MB and cannot be submitted. GPU memory was not the bottleneck; the payload was.
 
-- cuOpt's solver core consumes a **dense N×N** cost matrix (`matrix[i*n + j]`, O(1) coalesced load).
-- The API expands even a sparse K-NN input to dense before solving, so the **JSON payload** grows as
-  `~36·N²` bytes → **2 GB payload wall at ~7,500 stops**; 10k stops ≈ 3.5 GB (fails).
-- GPU memory (320 GB) was never the bottleneck — the **payload** is.
+## Options considered, and what was built
 
-## What we will test / build here (ranked, per `analysis/05` section A.3)
+Four options were evaluated. Option D (a true sparse read path in the solver core) plus REST ingestion was
+built, because it is the only one that removes both the payload wall and the O(N squared) memory growth.
 
-| Option | Idea | Solves payload wall? | Solves GPU O(N²)? | Effort |
-|--------|------|:---:|:---:|:---:|
-| **A. Server-side matrix generation** | client sends coords + K; server builds matrix on GPU | ✅ | ✗ | Low-Med |
-| B. Binary payload encoding | MessagePack/binary vs JSON | ~ | ✗ | Low |
-| C. Sparse-in, dense-solve (waypoint) | accept K-NN, densify on server | ✅ | ✗ | Med |
-| **D. True sparse solver core** | cost lookup reads CSR/K-NN directly | ✅ | ✅ (O(N·K)) | High |
+| Option | Idea | Removes payload wall | Removes O(N^2) memory |
+|--------|------|:--------------------:|:---------------------:|
+| A. Server-side matrix generation | client sends coordinates plus K; server builds the matrix | Yes | No |
+| B. Binary payload encoding | binary instead of JSON | Partial | No |
+| C. Sparse-in, dense-solve | accept K-NN, densify on the server | Yes | No |
+| D. Sparse solver core (delivered) | cost lookup reads the CSR / K-NN directly | Yes | Yes, O(N*K) |
 
-## Test plan (this folder)
+## Delivered
 
-1. **Dense N×N baseline** (`dense_nxn_test.py`): measure dense solve + matrix build across N
-   (e.g. 500 / 1k / 2.5k / 5k / 7.5k / 10k) on the H200 — reproduce the payload/memory growth law and
-   find where dense stops being practical. This is the control the sparse work must beat.
-2. **Waypoint / CSR sparse ingestion** (`waypoint_csr_test.py`): exercise cuOpt's existing
-   `waypoint_matrix` CSR path (`cpp/include/cuopt/routing/distance_engine/waypoint_matrix.hpp`) —
-   K-NN in, cost matrix out — and confirm it densifies before the solver (the nuance in `analysis/05`
-   section A.2).
-3. **Option A prototype**: server-side matrix generation from coordinates + K (payload → KB), solve
-   with the generated matrix; compare solve time vs the dense baseline at the same N.
-4. **(Stretch) Option D notes**: gate `has_sparse_cost`, coalesced K-NN layout, benchmark the inner
-   cost load — the only place "no perf impact" needs *measured* proof, not the feature-gate guarantee.
+1. Native sparse (CSR) cost-matrix read path in the solver core, gated by a has_sparse_cost flag so dense
+   problems are unchanged. Patch: `native-sparse/native-sparse-core.patch` (3 files: arc_value.hpp,
+   md_utils.hpp, fleet_info.cu).
+2. B5 REST ingestion: a cost_matrix_csr request field so the client sends the K-NN graph directly. Patch:
+   `native-sparse/b5-server-csr.patch` (3 server files).
 
-## Status
+## Result
 
-- [ ] Folder scaffolded (this README)
-- [ ] Dense N×N baseline measured
-- [ ] Waypoint/CSR path exercised
-- [ ] Option A prototype
-- [ ] Option D investigation (stretch)
+Same K-NN generator and same 10,000-stop scenario as the original benchmark. The payload that failed before
+now submits and solves:
 
-*Uses the same built cuOpt on the H200 (`~/cuopt-dev/cuopt/.cuopt_env`). Keep on a separate git branch
-off `main`.*
+| Stops | K | CSR request payload | Prior dense payload | Result |
+|-------|---|---------------------|---------------------|--------|
+| 10,000 | 10 | 2.94 MB | 2,290.5 MB | PASS (was FAIL) |
+| 10,000 | 20 | 5.39 MB | 2,292.0 MB | PASS (was FAIL) |
+| 10,000 | 50 | 12.68 MB | 2,296.5 MB | PASS (was FAIL) |
+
+Solver memory is O(N*K) instead of O(N^2): about 303x smaller at 10,000 stops and 3,030x at 100,000.
+Validated on NVIDIA A10 (sm_86).
+
+## Where the details are (native-sparse/)
+
+- native-sparse-core.patch, b5-server-csr.patch: the code changes
+- A10-BENCHMARK-REPORT.md: the benchmark write-up and results
+- B5-CSR-INGESTION.md: the CSR ingestion design and API
+- b5_csr_benchmark.py, sparse_matrix_generator.py: the runnable benchmark and its generator
+- DATASETS.md: the datasets (synthetic and seeded; no private data)
+- B5-PLAN-direct-csr-ingestion.md: the next step (native never-materialize-dense ingestion for 100k on one GPU)
