@@ -5,11 +5,12 @@ Same scenario + same K-NN generator as the original phase4_sparse_matrix benchma
 The original benchmark FAILED because the augmented dense payload exceeded the 2 GB REST limit
 (10k stops -> ~2,290 MB). Here we show the CSR payload is tiny and the server accepts it (PASS).
 """
-import sys, json, time
+import os, sys, json, time
 import numpy as np
 import requests
 
-sys.path.insert(0, "/work/phase4")
+# the K-NN generator ships alongside this script (see DATASETS.md)
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from sparse_matrix_generator import generate_sparse_matrix, haversine_distance
 
 BASE = "http://127.0.0.1:5000"
